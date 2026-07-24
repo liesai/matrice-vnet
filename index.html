@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Visualisateur de capacité réseau Azure depuis Excel">
+  <title>NetScope — Azure Network Assets</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12m0 0 5-5m-5 5-5-5"/><path d="M4 20h16"/></symbol>
+    <symbol id="i-calc" viewBox="0 0 24 24"><rect x="4" y="2.5" width="16" height="19" rx="2"/><path d="M8 6.5h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h4"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 4.2 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 3.5h.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 13h6m-6 4h6"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.2A8 8 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-9h.01"/></symbol>
+  </svg>
+
+  <aside class="sidebar">
+    <a class="brand" href="#" aria-label="NetScope accueil">
+      <span class="brand-mark"><span></span><span></span><span></span></span>
+      <span>Net<span>Scope</span></span>
+    </a>
+    <nav class="nav">
+      <a class="nav-item active" href="#overview"><svg><use href="#i-grid"/></svg><span>Vue d’ensemble</span></a>
+      <a class="nav-item" href="#topology"><svg><use href="#i-grid"/></svg><span>Topologie</span></a>
+      <a class="nav-item" href="#inventory"><svg><use href="#i-file"/></svg><span>Inventaire</span></a>
+      <a class="nav-item" href="#calculator"><svg><use href="#i-calc"/></svg><span>Calculateur IP</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="health-dot"><span></span><div><strong>Données locales</strong><small>Aucun envoi cloud</small></div></div>
+      <p>NETSCOPE <span>v1.0</span></p>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <button class="mobile-menu" id="mobileMenu" aria-label="Ouvrir le menu"><span></span><span></span><span></span></button>
+      <div>
+        <p class="eyebrow">AZURE NETWORK ASSETS</p>
+        <h1>Vue d’ensemble</h1>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn" id="themeToggle" aria-label="Changer de thème"><svg><use href="#i-moon"/></svg></button>
+        <a class="btn secondary" href="exemple-inventaire-azure.xlsx" download><svg><use href="#i-download"/></svg>Fichier exemple</a>
+        <button class="btn primary" id="importBtn"><svg><use href="#i-upload"/></svg>Importer Excel</button>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+      </div>
+    </header>
+
+    <div class="content">
+      <section class="import-strip" id="dropZone">
+        <div class="file-status">
+          <span class="file-icon"><svg><use href="#i-file"/></svg></span>
+          <div><strong id="fileName">exemple-inventaire-azure.xlsx</strong><small id="fileMeta">Données de démonstration • prêtes à explorer</small></div>
+        </div>
+        <div class="import-hint"><span>Déposez un fichier ici</span><small>.XLSX, .XLS ou .CSV</small></div>
+        <div class="data-quality"><span class="quality-ring">100</span><div><strong>Qualité des données</strong><small id="qualityText">Toutes les colonnes sont valides</small></div></div>
+      </section>
+
+      <section id="overview" class="kpi-grid" aria-label="Indicateurs clés">
+        <article class="kpi">
+          <div class="kpi-head"><span>ABONNEMENTS</span><span class="kpi-icon cyan">S</span></div>
+          <strong id="kpiSubscriptions">—</strong><small id="kpiSubDetail">environnement(s)</small>
+        </article>
+        <article class="kpi">
+          <div class="kpi-head"><span>RÉSEAUX VIRTUELS</span><span class="kpi-icon blue">V</span></div>
+          <strong id="kpiVnets">—</strong><small id="kpiVnetDetail">répartis par groupes</small>
+        </article>
+        <article class="kpi">
+          <div class="kpi-head"><span>SOUS-RÉSEAUX</span><span class="kpi-icon violet">N</span></div>
+          <strong id="kpiSubnets">—</strong><small id="kpiSubnetDetail">plages analysées</small>
+        </article>
+        <article class="kpi emphasis">
+          <div class="kpi-head"><span>ADRESSES LIBRES</span><span class="kpi-icon green">IP</span></div>
+          <strong id="kpiFree">—</strong><small id="kpiFreeDetail">sur — utilisables</small>
+        </article>
+        <article class="kpi">
+          <div class="kpi-head"><span>UTILISATION MOY.</span><span class="kpi-icon amber">%</span></div>
+          <strong id="kpiUtil">—</strong><small id="kpiAlertDetail">— alerte(s) capacité</small>
+        </article>
+      </section>
+
+      <section class="panel topology-panel" id="topology">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">CARTE DES ACTIFS</p>
+            <h2>Topologie & capacité</h2>
+          </div>
+          <div class="legend"><span><i class="healthy"></i>&lt; 65%</span><span><i class="warning"></i>65–84%</span><span><i class="critical"></i>≥ 85%</span></div>
+        </div>
+        <div class="topology-layout">
+          <div class="svg-wrap">
+            <svg id="networkSvg" viewBox="0 0 1040 530" role="img" aria-label="Topologie des réseaux Azure"></svg>
+            <div class="map-controls">
+              <button id="zoomIn" aria-label="Zoomer">+</button><button id="zoomOut" aria-label="Dézoomer">−</button><button id="zoomReset" aria-label="Réinitialiser">⌂</button>
+            </div>
+          </div>
+          <aside class="inspector" id="inspector">
+            <div class="empty-inspector">
+              <span class="pulse-icon">⌁</span>
+              <h3>Sélectionnez un sous-réseau</h3>
+              <p>Cliquez sur un nœud pour afficher sa capacité et ses recommandations.</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="workspace-grid">
+        <section class="panel inventory-panel" id="inventory">
+          <div class="panel-head">
+            <div><p class="eyebrow">INVENTAIRE</p><h2>Sous-réseaux</h2></div>
+            <button class="btn compact secondary" id="exportCsv"><svg><use href="#i-download"/></svg>Exporter</button>
+          </div>
+          <div class="filters">
+            <label class="search"><svg><use href="#i-search"/></svg><input id="searchInput" type="search" placeholder="Rechercher un VNet, subnet, CIDR…"></label>
+            <select id="subscriptionFilter" aria-label="Filtrer par abonnement"><option value="">Tous les abonnements</option></select>
+            <select id="statusFilter" aria-label="Filtrer par état"><option value="">Tous les états</option><option value="critical">Critique ≥ 85%</option><option value="warning">À surveiller</option><option value="healthy">Sain &lt; 65%</option></select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th data-sort="Subnet">SOUS-RÉSEAU</th><th data-sort="VNet">VNET</th><th data-sort="Prefix">PRÉFIXE</th><th data-sort="UsedIPs">UTILISÉES</th><th data-sort="FreeIPs">LIBRES</th><th data-sort="UtilizationPct">UTILISATION</th><th>ÉTAT</th></tr></thead>
+              <tbody id="inventoryBody"></tbody>
+            </table>
+          </div>
+          <div class="table-foot"><span id="rowCount">0 sous-réseau</span><span>Cliquez une ligne pour inspecter</span></div>
+        </section>
+
+        <aside class="right-stack">
+          <section class="panel alerts-panel">
+            <div class="panel-head"><div><p class="eyebrow">PRIORITÉS</p><h2>Alertes capacité</h2></div><span class="alert-count" id="alertCount">0</span></div>
+            <div id="alertsList" class="alerts-list"></div>
+          </section>
+
+          <section class="panel calculator" id="calculator">
+            <div class="panel-head"><div><p class="eyebrow">OUTIL RAPIDE</p><h2>Calculateur IPv4</h2></div><span class="calc-symbol">/24</span></div>
+            <div class="calc-fields">
+              <label>Adresse réseau / CIDR<input id="cidrInput" value="10.42.8.0/24" spellcheck="false"></label>
+              <label>IP déjà utilisées<input id="usedInput" type="number" value="120" min="0"></label>
+              <button class="btn primary" id="calculateBtn">Calculer la capacité</button>
+            </div>
+            <div class="calc-error" id="calcError"></div>
+            <div class="calc-results" id="calcResults">
+              <div><span>Plage</span><strong id="calcRange">—</strong></div>
+              <div><span>Azure utilisables</span><strong id="calcUsable">—</strong></div>
+              <div><span>IP libres</span><strong class="green-text" id="calcFree">—</strong></div>
+              <div><span>Masque</span><strong id="calcMask">—</strong></div>
+              <div><span>Première IP Azure</span><strong id="calcFirst">—</strong></div>
+              <div><span>Dernière IP Azure</span><strong id="calcLast">—</strong></div>
+            </div>
+            <p class="azure-note"><svg><use href="#i-info"/></svg>Azure réserve 5 adresses par sous-réseau.</p>
+          </section>
+        </aside>
+      </section>
+    </div>
+    <footer><span>NetScope • Visualisation locale et sécurisée</span><span id="lastUpdated">Mis à jour à l’instant</span></footer>
+  </main>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
