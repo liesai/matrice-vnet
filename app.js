@@ -23,6 +23,8 @@ let filteredData = [...data];
 let selectedRow = null;
 let sortState = { key: "UtilizationPct", dir: -1 };
 let mapScale = 1;
+let topologyPage = 0;
+const TOPOLOGY_PAGE_SIZE = 12;
 let toastTimer;
 
 const $ = (id) => document.getElementById(id);
@@ -103,6 +105,33 @@ function populateFilters() {
   if (options.includes(current)) $("subscriptionFilter").value = current;
 }
 
+function populateTopologyFilters() {
+  const subscriptionSelect = $("topologySubscription");
+  const vnetSelect = $("topologyVnet");
+  const currentSubscription = subscriptionSelect.value;
+  const currentVnet = vnetSelect.value;
+  const subscriptions = [...new Set(data.map(r=>r.SubscriptionName))].sort((a,b)=>a.localeCompare(b,"fr"));
+  subscriptionSelect.innerHTML = `<option value="">Tous les abonnements (${subscriptions.length})</option>` +
+    subscriptions.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  if (subscriptions.includes(currentSubscription)) subscriptionSelect.value = currentSubscription;
+  const availableRows = subscriptionSelect.value ? data.filter(r=>r.SubscriptionName===subscriptionSelect.value) : data;
+  const vnets = [...new Set(availableRows.map(r=>r.VNet))].sort((a,b)=>a.localeCompare(b,"fr"));
+  vnetSelect.innerHTML = `<option value="">Tous les VNets (${vnets.length})</option>` +
+    vnets.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  if (vnets.includes(currentVnet)) vnetSelect.value = currentVnet;
+}
+
+function getTopologyRows() {
+  const subscription = $("topologySubscription").value;
+  const vnet = $("topologyVnet").value;
+  const q = $("topologySearch").value.trim().toLowerCase();
+  return data.filter(row => {
+    const haystack = [row.SubscriptionName,row.ResourceGroup,row.VNet,row.Subnet,row.Prefix].join(" ").toLowerCase();
+    return (!subscription || row.SubscriptionName===subscription) &&
+      (!vnet || row.VNet===vnet) && (!q || haystack.includes(q));
+  });
+}
+
 function applyFilters() {
   const q = $("searchInput").value.trim().toLowerCase();
   const sub = $("subscriptionFilter").value;
@@ -145,7 +174,18 @@ function renderAlerts() {
 
 function renderTopology() {
   const svg = $("networkSvg");
-  const displayed = data.slice(0, 12);
+  const topologyRows = getTopologyRows();
+  const pageCount = Math.max(1, Math.ceil(topologyRows.length / TOPOLOGY_PAGE_SIZE));
+  topologyPage = Math.min(Math.max(0, topologyPage), pageCount - 1);
+  const start = topologyPage * TOPOLOGY_PAGE_SIZE;
+  const displayed = topologyRows.slice(start, start + TOPOLOGY_PAGE_SIZE);
+  $("topologyPageInfo").textContent = topologyRows.length ? `${start+1}–${start+displayed.length} / ${topologyRows.length}` : "0 résultat";
+  $("topologyPrev").disabled = topologyPage===0;
+  $("topologyNext").disabled = topologyPage>=pageCount-1;
+  if (!displayed.length) {
+    svg.innerHTML = `<g><text x="520" y="245" text-anchor="middle" class="topology-label" style="font-size:13px">Aucun actif ne correspond à ces filtres</text><text x="520" y="267" text-anchor="middle" class="topology-sublabel" style="font-size:9px">Modifiez la recherche, l’abonnement ou le VNet.</text></g>`;
+    return;
+  }
   const rowGap = displayed.length > 1 ? Math.min(41, 450 / (displayed.length - 1)) : 0;
   const rowY = new Map(displayed.map((row, i) => [row, 42 + i * rowGap]));
   const avgY = rows => rows.reduce((sum, row) => sum + rowY.get(row), 0) / rows.length;
@@ -251,24 +291,79 @@ async function importFile(file) {
   } catch(err) { showToast(err.message || "Impossible de lire ce fichier."); }
 }
 
-function refreshAll(){updateDashboard();populateFilters();applyFilters();renderTopology()}
+function refreshAll(){updateDashboard();populateFilters();populateTopologyFilters();applyFilters();renderTopology();renderAddressSpace()}
 
 function ipToInt(ip) {
   const parts=ip.split(".");
-  if(parts.length!==4||parts.some(p=>!/^\\d+$/.test(p)||Number(p)>255)) throw new Error("Adresse IPv4 invalide.");
+  if(parts.length!==4||parts.some(p=>!/^\d+$/.test(p)||Number(p)>255)) throw new Error("Adresse IPv4 invalide.");
   return parts.reduce((acc,p)=>(acc*256+Number(p))>>>0,0)>>>0;
 }
 function intToIp(n){return [n>>>24,(n>>>16)&255,(n>>>8)&255,n&255].join(".")}
+function parseCidrRange(value) {
+  const [ip,prefixRaw,...extra]=String(value).trim().split("/");
+  const prefix=Number(prefixRaw);
+  if(extra.length || !Number.isInteger(prefix) || prefix<0 || prefix>32) throw new Error("Le préfixe CIDR doit être entre /0 et /32.");
+  const ipInt=ipToInt(ip);
+  const mask=prefix===0?0:(0xffffffff<<(32-prefix))>>>0;
+  const start=(ipInt&mask)>>>0;
+  const size=2**(32-prefix);
+  const end=start+size-1;
+  return {start,end,prefix,canonical:`${intToIp(start)}/${prefix}`};
+}
+
+function renderAddressSpace() {
+  const results = $("addressResults");
+  try {
+    const target=parseCidrRange($("addressSpaceInput").value);
+    const matches=data.flatMap(row=>{
+      try {
+        const range=parseCidrRange(row.Prefix);
+        return range.start<=target.end && target.start<=range.end ? [{row,range}] : [];
+      } catch { return []; }
+    });
+    const grouped=new Map();
+    matches.forEach(({row,range})=>{
+      const key=`${row.subscriptionid}|${row.VNet}`;
+      if(!grouped.has(key)) grouped.set(key,{subscription:row.SubscriptionName,subscriptionid:row.subscriptionid,vnet:row.VNet,resourceGroup:row.ResourceGroup,rows:[]});
+      grouped.get(key).rows.push({...row,canonicalPrefix:range.canonical});
+    });
+    const vnets=[...grouped.values()].sort((a,b)=>a.vnet.localeCompare(b.vnet,"fr"));
+    $("addressVnetCount").textContent=fmt(vnets.length);
+    $("addressSubnetCount").textContent=`${matches.length} préfixe${matches.length>1?"s":""} correspondant${matches.length>1?"s":""}`;
+    $("addressSpaceError").style.display="none";
+    results.innerHTML=vnets.map((item,i)=>`<article class="address-result" data-address-result="${i}">
+      <div class="address-result-head"><h3 title="${esc(item.vnet)}">${esc(item.vnet)}</h3><span class="match-count">${item.rows.length} subnet${item.rows.length>1?"s":""}</span></div>
+      <p>${esc(item.subscription)} · ${esc(item.resourceGroup)}</p>
+      <div class="address-result-prefixes">${item.rows.slice(0,4).map(r=>`<span>${esc(r.canonicalPrefix)}</span>`).join("")}${item.rows.length>4?`<span>+${item.rows.length-4}</span>`:""}</div>
+    </article>`).join("") || `<div class="address-empty">Aucun VNet ne chevauche la plage <strong>${esc(target.canonical)}</strong>.</div>`;
+    results.querySelectorAll("[data-address-result]").forEach(el=>el.addEventListener("click",()=>{
+      const item=vnets[Number(el.dataset.addressResult)];
+      $("topologySubscription").value=item.subscription;
+      populateTopologyFilters();
+      $("topologyVnet").value=item.vnet;
+      $("topologySearch").value="";
+      topologyPage=0;
+      renderTopology();
+      document.querySelector("#topology").scrollIntoView({behavior:"smooth",block:"start"});
+      showToast(`${item.vnet} affiché dans la topologie`);
+    }));
+  } catch(err) {
+    $("addressVnetCount").textContent="—";
+    $("addressSubnetCount").textContent="Plage à corriger";
+    $("addressSpaceError").textContent=err.message;
+    $("addressSpaceError").style.display="block";
+    results.innerHTML=`<div class="address-empty">Saisissez une adresse au format <strong>10.0.0.0/8</strong>.</div>`;
+  }
+}
+
 function calculateCidr() {
   try {
-    const [ip,prefixRaw]=$("cidrInput").value.trim().split("/");
-    const prefix=Number(prefixRaw);
-    if(!Number.isInteger(prefix)||prefix<0||prefix>32) throw new Error("Le préfixe CIDR doit être entre /0 et /32.");
-    const ipInt=ipToInt(ip);
+    const cidr=parseCidrRange($("cidrInput").value);
+    const prefix=cidr.prefix;
     const mask=prefix===0?0:(0xffffffff<<(32-prefix))>>>0;
-    const network=(ipInt&mask)>>>0;
+    const network=cidr.start;
     const total=2**(32-prefix);
-    const end=(network+total-1)>>>0;
+    const end=cidr.end;
     const usable=Math.max(0,total-5);
     const used=Math.max(0,Number($("usedInput").value)||0);
     const free=Math.max(0,usable-used);
@@ -284,8 +379,8 @@ function calculateCidr() {
 
 function exportCsv() {
   const rows=filteredData.length?filteredData:data;
-  const csv=[REQUIRED_COLUMNS.join(","),...rows.map(r=>REQUIRED_COLUMNS.map(k=>`"${String(r[k]??"").replaceAll('"','""')}"`).join(","))].join("\\n");
-  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\\ufeff"+csv],{type:"text/csv;charset=utf-8"}));a.download="inventaire-reseau-filtre.csv";a.click();URL.revokeObjectURL(a.href);
+  const csv=[REQUIRED_COLUMNS.join(","),...rows.map(r=>REQUIRED_COLUMNS.map(k=>`"${String(r[k]??"").replaceAll('"','""')}"`).join(","))].join("\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));a.download="inventaire-reseau-filtre.csv";a.click();URL.revokeObjectURL(a.href);
   showToast(`${rows.length} lignes exportées`);
 }
 
@@ -297,10 +392,17 @@ $("dropZone").addEventListener("drop",e=>e.dataTransfer.files[0]&&importFile(e.d
 $("searchInput").addEventListener("input",applyFilters);
 $("subscriptionFilter").addEventListener("change",applyFilters);
 $("statusFilter").addEventListener("change",applyFilters);
+$("topologySubscription").addEventListener("change",()=>{topologyPage=0;populateTopologyFilters();renderTopology()});
+$("topologyVnet").addEventListener("change",()=>{topologyPage=0;renderTopology()});
+$("topologySearch").addEventListener("input",()=>{topologyPage=0;renderTopology()});
+$("topologyPrev").addEventListener("click",()=>{topologyPage--;renderTopology()});
+$("topologyNext").addEventListener("click",()=>{topologyPage++;renderTopology()});
 document.querySelectorAll("th[data-sort]").forEach(th=>th.addEventListener("click",()=>{sortState.dir=sortState.key===th.dataset.sort?-sortState.dir:1;sortState.key=th.dataset.sort;applyFilters()}));
 $("exportCsv").addEventListener("click",exportCsv);
 $("calculateBtn").addEventListener("click",calculateCidr);
 $("cidrInput").addEventListener("keydown",e=>e.key==="Enter"&&calculateCidr());
+$("addressSpaceBtn").addEventListener("click",renderAddressSpace);
+$("addressSpaceInput").addEventListener("keydown",e=>e.key==="Enter"&&renderAddressSpace());
 $("themeToggle").addEventListener("click",()=>{
   const light=document.documentElement.dataset.theme==="light";
   document.documentElement.dataset.theme=light?"dark":"light";

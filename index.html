@@ -100,6 +100,16 @@
           </div>
           <div class="legend"><span><i class="healthy"></i>&lt; 65%</span><span><i class="warning"></i>65–84%</span><span><i class="critical"></i>≥ 85%</span></div>
         </div>
+        <div class="topology-toolbar">
+          <label><span>ABONNEMENT</span><select id="topologySubscription"><option value="">Tous les abonnements</option></select></label>
+          <label><span>VNET</span><select id="topologyVnet"><option value="">Tous les VNets</option></select></label>
+          <label class="topology-search"><span>RECHERCHE</span><input id="topologySearch" type="search" placeholder="VNet, subnet, préfixe…"></label>
+          <div class="topology-pagination">
+            <span id="topologyPageInfo">—</span>
+            <button id="topologyPrev" aria-label="Page précédente">‹</button>
+            <button id="topologyNext" aria-label="Page suivante">›</button>
+          </div>
+        </div>
         <div class="topology-layout">
           <div class="svg-wrap">
             <svg id="networkSvg" viewBox="0 0 1040 530" role="img" aria-label="Topologie des réseaux Azure"></svg>
@@ -115,6 +125,25 @@
             </div>
           </aside>
         </div>
+      </section>
+
+      <section class="panel address-explorer" id="addressExplorer">
+        <div class="address-copy">
+          <p class="eyebrow">ADDRESS SPACE EXPLORER</p>
+          <h2>Trouver les VNets associés à une plage</h2>
+          <p>Saisissez un CIDR pour détecter les VNets dont les préfixes de sous-réseaux sont inclus dans cette plage ou la chevauchent.</p>
+        </div>
+        <div class="address-query">
+          <label>Adresse réseau / CIDR
+            <div><input id="addressSpaceInput" value="10.0.0.0/8" spellcheck="false"><button class="btn primary" id="addressSpaceBtn">Analyser</button></div>
+          </label>
+          <span class="address-error" id="addressSpaceError"></span>
+        </div>
+        <div class="address-summary" id="addressSummary">
+          <strong id="addressVnetCount">—</strong><span>VNets associés</span>
+          <small id="addressSubnetCount">— préfixes correspondants</small>
+        </div>
+        <div class="address-results" id="addressResults"></div>
       </section>
 
       <section class="workspace-grid">
