@@ -1,0 +1,15 @@
+{
+  "javascript_elements": 0,
+  "event_handlers": 0,
+  "external_resources": 0,
+  "CSP_scripts": "blocked",
+  "editable_text_regions": 234,
+  "movable_components": 50,
+  "position_selectors": "not run",
+  "browser_interaction_test": "Not run: the browser tool blocks file:// navigation. No alternative route attempted.",
+  "limitations": [
+    "Movement uses discrete CSS offsets, not free dragging",
+    "Connectors remain fixed",
+    "Browser edits are temporary; no automatic source saving"
+  ]
+}
